@@ -46,6 +46,7 @@ function tibiaTiltDeg(ankle,knee){
 }
 function toPx(l,w,h){ return {x:l.x*w,y:l.y*h,z:l.z}; }
 
+// ---------- Model ----------
 async function loadModel(){
   statusBox.textContent="モデル読込中...";
   const fr = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm");
@@ -60,10 +61,17 @@ async function loadModel(){
   statusBox.textContent="モデル読込完了";
 }
 
+// Safariで自動読込（ボタン押し忘れ対策）
+document.addEventListener("DOMContentLoaded", () => {
+  loadModel().catch(e => { statusBox.textContent = "モデル読込エラー: " + e.message; });
+});
+
+// ---------- Camera ----------
 async function startCamera(){
   if(!poseLandmarker) await loadModel();
   stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}, audio:false});
   videoEl.srcObject = stream;
+  videoEl.playsInline = true; // iOS必須
   await videoEl.play();
   videoPlaying = true;
   canvas.width = videoEl.videoWidth;
@@ -79,33 +87,40 @@ function stopCamera(){
   statusBox.textContent="停止";
 }
 
-// ✅ 修正版：動画ファイル読み込み（iPhone対応）
+// ---------- Video file (iPhone対応強化) ----------
 async function playVideoFile(){
   if(!poseLandmarker) await loadModel();
-  const file = videoFile.files?.[0]; 
+  const file = videoFile.files?.[0];
   if(!file){ alert("動画を選択してください"); return; }
   const url = URL.createObjectURL(file);
   videoEl.srcObject = null;
   videoEl.src = url;
 
+  // iOSの自動再生制限回避：無音＆インライン再生を指定
+  videoEl.muted = true;
+  videoEl.setAttribute("muted","muted");
+  videoEl.playsInline = true;
+  videoEl.controls = true; // 再生ボタンを出す（ユーザー操作のトリガー）
+
   videoEl.onloadedmetadata = async () => {
-    canvas.width = videoEl.videoWidth;
-    canvas.height = videoEl.videoHeight;
-    statusBox.textContent="動画解析中...";
-    // iPhone Safari は自動再生をブロックするのでユーザー操作で再生させる
+    canvas.width = videoEl.videoWidth || canvas.width;
+    canvas.height = videoEl.videoHeight || canvas.height;
+    statusBox.textContent="動画解析の準備完了（▶️を押して再生）";
+    // 自動再生を試み、失敗したら手動再生を促す
     try {
       await videoEl.play();
-      videoPlaying = true;
-      requestAnimationFrame(processFrame);
+      startVideoLoop();
     } catch(e) {
-      statusBox.textContent="▶️ を押して再生してください";
-      videoEl.controls = true; // 手動再生できるようにする
-      videoEl.addEventListener("play", () => {
-        videoPlaying = true;
-        requestAnimationFrame(processFrame);
-      }, { once:true });
+      // 手動再生イベントで解析を開始
+      videoEl.addEventListener("play", startVideoLoop, { once:true });
     }
   };
+}
+
+function startVideoLoop(){
+  videoPlaying = true;
+  statusBox.textContent="動画解析中...";
+  requestAnimationFrame(processFrame);
 }
 
 function drawResults(lms){
@@ -126,8 +141,9 @@ function updateMetricsUI(){
   pelvicDrop.textContent=isNaN(pD)?"-":pD.toFixed(1);
   stepWidth.textContent=isNaN(sW)?"-":sW.toFixed(2);
   tibiaTilt.textContent=isNaN(tT)?"-":tT.toFixed(1);
-  const sideOnly=document.querySelectorAll(".side-only");
-  sideOnly.forEach(el=>{ el.style.display = (viewSelect.value==="side")?"list-item":"none"; });
+  document.querySelectorAll(".side-only").forEach(el=>{
+    el.style.display = (viewSelect.value==="side") ? "list-item":"none";
+  });
 }
 
 function computeMetrics(lms,w,h){
@@ -152,21 +168,21 @@ async function processFrame(ts){
   if(lastTs===ts){ requestAnimationFrame(processFrame); return; }
   lastTs=ts;
   const w=videoEl.videoWidth, h=videoEl.videoHeight;
-  canvas.width=w; canvas.height=h;
-  ctx.clearRect(0,0,w,h);
+  if(w && h){ canvas.width=w; canvas.height=h; }
+  ctx.clearRect(0,0,canvas.width,canvas.height);
   try{
     const res=await poseLandmarker.detectForVideo(videoEl,ts);
     if(res && res.landmarks && res.landmarks.length){
       const lms=res.landmarks[0];
       drawResults(lms);
-      computeMetrics(lms,w,h);
+      computeMetrics(lms,canvas.width,canvas.height);
       updateMetricsUI();
     }
   }catch(e){ statusBox.textContent="推論エラー: "+e.message; }
   requestAnimationFrame(processFrame);
 }
 
-loadModelBtn.addEventListener("click", loadModel);
+loadModelBtn.addEventListener("click", () => loadModel().catch(e=>statusBox.textContent="モデル読込エラー: "+e.message));
 startCamBtn.addEventListener("click", startCamera);
 stopCamBtn.addEventListener("click", stopCamera);
 playFileBtn.addEventListener("click", playVideoFile);
