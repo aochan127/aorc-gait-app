@@ -9,11 +9,10 @@
 <body>
   <header>
     <h1>歩行フォーム簡易評価（シンスプリント予防指標）</h1>
-    <p>カメラ または 動画を解析し、膝内反、骨盤ドロップ、ステップ幅、脛骨傾きの簡易指標を表示します。</p>
-    <div class="notice">
-      注意：教育・セルフチェック目的のプロトタイプです。臨床判断と併用してください。
-    </div>
+    <p>スマホ/PCのカメラを解析し、膝内反・骨盤ドロップ・ステップ幅・脛骨傾きを表示します。</p>
+    <div class="notice">本ツールは教育・セルフチェック用のプロトタイプです。</div>
   </header>
+
   <main>
     <section class="controls">
       <div class="row">
@@ -26,15 +25,12 @@
         <button id="startCamBtn">カメラ開始</button>
         <button id="stopCamBtn" disabled>停止</button>
       </div>
-      <div class="row">
-        <input type="file" id="videoFile" accept="video/*" />
-        <button id="playFileBtn">動画解析</button>
-      </div>
       <div class="row small">
         <label><input type="checkbox" id="drawSkeleton" checked> 骨格を描画</label>
         <label><input type="checkbox" id="showKeypoints" checked> キーポイント表示</label>
       </div>
     </section>
+
     <section class="stage">
       <div class="video-wrap">
         <video id="video" playsinline></video>
@@ -43,27 +39,26 @@
       <aside class="metrics">
         <h2>リスク指標（平均値）</h2>
         <ul>
-          <li><strong>膝内反角（左/右）</strong>：<span id="valgusL">-</span>° / <span id="valgusR">-</span>° <small>目安：< 165° 注意</small></li>
-          <li><strong>骨盤ドロップ</strong>：<span id="pelvicDrop">-</span>° <small>目安：> 5° 注意</small></li>
-          <li><strong>ステップ幅</strong>：<span id="stepWidth">-</span> <small>足首距離/骨盤幅；< 0.3 狭い</small></li>
-          <li class="side-only"><strong>脛骨傾き（側方）</strong>：<span id="tibiaTilt">-</span>° <small>後傾 > 8° 注意</small></li>
+          <li><strong>膝内反角（左/右）</strong>：<span id="valgusL">-</span>° / <span id="valgusR">-</span>°</li>
+          <li><strong>骨盤ドロップ</strong>：<span id="pelvicDrop">-</span>°</li>
+          <li><strong>ステップ幅</strong>：<span id="stepWidth">-</span></li>
+          <li class="side-only"><strong>脛骨傾き（側方）</strong>：<span id="tibiaTilt">-</span>°</li>
         </ul>
         <div class="status" id="status">モデル未読込</div>
       </aside>
     </section>
+
     <section class="howto">
       <h2>撮影ガイド</h2>
       <ol>
-        <li>カメラは腰〜胸の高さ、全身が入る距離（約3〜5m）。</li>
-        <li>正面/側方からやや速歩きで5〜10秒。</li>
-        <li>明るい背景、コントラストを確保。</li>
+        <li>カメラを腰〜胸の高さに固定、全身が入る距離（3–5m）。</li>
+        <li>正面/側方からやや速歩きで5–10秒。</li>
+        <li>iPhoneはHTTPSでOK（GitHub PagesはHTTPS）。</li>
       </ol>
-      <p class="tip">iOS/Safari は HTTPS または <code>localhost</code> でカメラが使えます（GitHub Pages は HTTPS）。</p>
     </section>
   </main>
-  <footer>
-    <p>© A.O.R.C. / Prototype by ChatGPT</p>
-  </footer>
+
+  <footer><p>© A.O.R.C.</p></footer>
   <script type="module" src="script.js"></script>
 </body>
 </html>
