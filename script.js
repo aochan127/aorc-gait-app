@@ -30,15 +30,6 @@ let lastTs = -1;
 const metricsBuffer = { valgusL: [], valgusR: [], pelvicDrop: [], stepWidth: [], tibiaTilt: [] };
 const MAX_BUF = 300;
 
-const IDX = {
-  nose: 0, l_eye_inner: 1, l_eye: 2, l_eye_outer: 3, r_eye_inner: 4, r_eye: 5, r_eye_outer: 6,
-  l_ear: 7, r_ear: 8, l_mouth: 9, r_mouth: 10,
-  l_shoulder: 11, r_shoulder: 12, l_elbow: 13, r_elbow: 14, l_wrist: 15, r_wrist: 16,
-  l_pinky: 17, r_pinky: 18, l_index: 19, r_index: 20, l_thumb: 21, r_thumb: 22,
-  l_hip: 23, r_hip: 24, l_knee: 25, r_knee: 26, l_ankle: 27, r_ankle: 28,
-  l_heel: 29, r_heel: 30, l_foot_index: 31, r_foot_index: 32
-};
-
 function avg(a){ return a.length ? a.reduce((x,y)=>x+y,0)/a.length : NaN; }
 
 function angleDeg(a,b,c){
@@ -87,25 +78,42 @@ function stopCamera(){
   startCamBtn.disabled=false; stopCamBtn.disabled=true;
   statusBox.textContent="停止";
 }
+
+// ✅ 修正版：動画ファイル読み込み（iPhone対応）
 async function playVideoFile(){
   if(!poseLandmarker) await loadModel();
-  const file = videoFile.files?.[0]; if(!file){ alert("動画を選択してください"); return; }
+  const file = videoFile.files?.[0]; 
+  if(!file){ alert("動画を選択してください"); return; }
   const url = URL.createObjectURL(file);
-  videoEl.srcObject = null; videoEl.src = url;
-  await videoEl.play();
-  videoPlaying=true;
-  canvas.width=videoEl.videoWidth; canvas.height=videoEl.videoHeight;
-  statusBox.textContent="動画解析中...";
-  lastTs=-1;
-  requestAnimationFrame(processFrame);
+  videoEl.srcObject = null;
+  videoEl.src = url;
+
+  videoEl.onloadedmetadata = async () => {
+    canvas.width = videoEl.videoWidth;
+    canvas.height = videoEl.videoHeight;
+    statusBox.textContent="動画解析中...";
+    // iPhone Safari は自動再生をブロックするのでユーザー操作で再生させる
+    try {
+      await videoEl.play();
+      videoPlaying = true;
+      requestAnimationFrame(processFrame);
+    } catch(e) {
+      statusBox.textContent="▶️ を押して再生してください";
+      videoEl.controls = true; // 手動再生できるようにする
+      videoEl.addEventListener("play", () => {
+        videoPlaying = true;
+        requestAnimationFrame(processFrame);
+      }, { once:true });
+    }
+  };
 }
 
 function drawResults(lms){
   const du = new DrawingUtils(ctx);
-  if(document.getElementById("drawSkeleton").checked){
+  if(drawSkeleton.checked){
     du.drawLandmarks(lms,{radius:3});
     du.drawConnectors(lms, PoseLandmarker.POSE_CONNECTIONS);
-  }else if(document.getElementById("showKeypoints").checked){
+  }else if(showKeypoints.checked){
     du.drawLandmarks(lms,{radius:2});
   }
 }
@@ -118,72 +126,49 @@ function updateMetricsUI(){
   pelvicDrop.textContent=isNaN(pD)?"-":pD.toFixed(1);
   stepWidth.textContent=isNaN(sW)?"-":sW.toFixed(2);
   tibiaTilt.textContent=isNaN(tT)?"-":tT.toFixed(1);
-
-  const sideOnly = document.querySelectorAll(".side-only");
-  sideOnly.forEach(el=>{ el.style.display = (viewSelect.value==="side") ? "list-item":"none"; });
-
-  function hint(el,val,ok){ if(isNaN(val)){ el.parentElement.style.color=""; return; } el.parentElement.style.color = ok(val)? "":"#b30000"; }
-  hint(valgusL,vL,v=>v>=165); hint(valgusR,vR,v=>v>=165);
-  hint(pelvicDrop,pD,v=>v<=5); hint(stepWidth,sW,v=>v>=0.3);
-  if(viewSelect.value==="side"){ hint(tibiaTilt,tT,v=>v<=8); }
+  const sideOnly=document.querySelectorAll(".side-only");
+  sideOnly.forEach(el=>{ el.style.display = (viewSelect.value==="side")?"list-item":"none"; });
 }
 
 function computeMetrics(lms,w,h){
+  const IDX={l_hip:23,r_hip:24,l_knee:25,r_knee:26,l_ankle:27,r_ankle:28};
   const L=(i)=>toPx(lms[i],w,h);
   const lh=L(IDX.l_hip), rh=L(IDX.r_hip), lk=L(IDX.l_knee), rk=L(IDX.r_knee), la=L(IDX.l_ankle), ra=L(IDX.r_ankle);
-  const l_vis=lms[IDX.l_hip].visibility>0.3 && lms[IDX.l_knee].visibility>0.3 && lms[IDX.l_ankle].visibility>0.3;
-  const r_vis=lms[IDX.r_hip].visibility>0.3 && lms[IDX.r_knee].visibility>0.3 && lms[IDX.r_ankle].visibility>0.3;
-
   const vl=angleDeg(lh,lk,la), vr=angleDeg(rh,rk,ra);
   if(!isNaN(vl)) metricsBuffer.valgusL.push(vl);
   if(!isNaN(vr)) metricsBuffer.valgusR.push(vr);
-
-  if(l_vis && r_vis){
-    const hipW=Math.max(1, Math.hypot(lh.x-rh.x, lh.y-rh.y));
-    const dy=(lh.y-rh.y);
-    const angle=Math.atan2(Math.abs(dy), hipW)*180/Math.PI;
-    metricsBuffer.pelvicDrop.push(angle);
-    const sw=Math.abs(la.x - ra.x)/hipW;
-    metricsBuffer.stepWidth.push(sw);
-  }
-
-  const tibL=tibiaTiltDeg(la,lk), tibR=tibiaTiltDeg(ra,rk);
-  const use = la.y>ra.y ? Math.abs(tibL) : Math.abs(tibR);
-  if(!isNaN(use)) metricsBuffer.tibiaTilt.push(use);
-
-  for(const k of Object.keys(metricsBuffer)){
-    if(metricsBuffer[k].length>MAX_BUF) metricsBuffer[k].shift();
-  }
+  const hipW=Math.max(1,Math.hypot(lh.x-rh.x,lh.y-rh.y));
+  const dy=(lh.y-rh.y);
+  const angle=Math.atan2(Math.abs(dy), hipW)*180/Math.PI;
+  metricsBuffer.pelvicDrop.push(angle);
+  metricsBuffer.stepWidth.push(Math.abs(la.x-ra.x)/hipW);
+  const tib=Math.abs((la.y>ra.y)?tibiaTiltDeg(la,lk):tibiaTiltDeg(ra,rk));
+  if(!isNaN(tib)) metricsBuffer.tibiaTilt.push(tib);
+  for(const k in metricsBuffer){ if(metricsBuffer[k].length>MAX_BUF) metricsBuffer[k].shift(); }
 }
 
 async function processFrame(ts){
   if(!videoPlaying) return;
   if(lastTs===ts){ requestAnimationFrame(processFrame); return; }
   lastTs=ts;
-
   const w=videoEl.videoWidth, h=videoEl.videoHeight;
   canvas.width=w; canvas.height=h;
   ctx.clearRect(0,0,w,h);
-
   try{
-    const res = await poseLandmarker.detectForVideo(videoEl, ts);
+    const res=await poseLandmarker.detectForVideo(videoEl,ts);
     if(res && res.landmarks && res.landmarks.length){
-      const lms = res.landmarks[0];
+      const lms=res.landmarks[0];
       drawResults(lms);
-      computeMetrics(lms, w, h);
+      computeMetrics(lms,w,h);
       updateMetricsUI();
     }
-  }catch(e){
-    console.error(e);
-    statusBox.textContent="推論エラー: "+e.message;
-  }finally{
-    requestAnimationFrame(processFrame);
-  }
+  }catch(e){ statusBox.textContent="推論エラー: "+e.message; }
+  requestAnimationFrame(processFrame);
 }
 
-document.getElementById("loadModelBtn").addEventListener("click", loadModel);
-document.getElementById("startCamBtn").addEventListener("click", startCamera);
-document.getElementById("stopCamBtn").addEventListener("click", stopCamera);
-document.getElementById("playFileBtn").addEventListener("click", playVideoFile);
+loadModelBtn.addEventListener("click", loadModel);
+startCamBtn.addEventListener("click", startCamera);
+stopCamBtn.addEventListener("click", stopCamera);
+playFileBtn.addEventListener("click", playVideoFile);
 
 updateMetricsUI();
