@@ -9,8 +9,8 @@
 <body>
   <header>
     <h1>歩行フォーム簡易評価（シンスプリント予防指標）</h1>
-    <p>カメラ or 動画ファイルで解析（膝内反・骨盤ドロップ・ステップ幅・脛骨傾き）。</p>
-    <div class="notice">教育・セルフチェック用のプロトタイプ。臨床判断と併用してください。</div>
+    <p>カメラ / 動画ファイル / 画像（写真）で解析できます。</p>
+    <div class="notice">教育・セルフチェック用プロトタイプ。臨床判断と併用してください。</div>
   </header>
 
   <main>
@@ -25,11 +25,18 @@
         <button id="startCamBtn">カメラ開始</button>
         <button id="stopCamBtn" disabled>停止</button>
       </div>
+
       <div class="row">
-        <!-- iPhone動画も選べる -->
         <input type="file" id="videoFile" accept="video/*" />
         <button id="playFileBtn">動画解析</button>
       </div>
+
+      <div class="row">
+        <!-- 追加：画像アップロード -->
+        <input type="file" id="imageFile" accept="image/*" />
+        <button id="analyzeImageBtn">画像解析</button>
+      </div>
+
       <div class="row small">
         <label><input type="checkbox" id="drawSkeleton" checked> 骨格を描画</label>
         <label><input type="checkbox" id="showKeypoints" checked> キーポイント表示</label>
@@ -38,7 +45,6 @@
 
     <section class="stage">
       <div class="video-wrap">
-        <!-- iPhoneでのインライン再生対策：playsinline + mutedを許容 -->
         <video id="video" playsinline webkit-playsinline muted controls preload="metadata"></video>
         <canvas id="overlay"></canvas>
       </div>
@@ -55,11 +61,11 @@
     </section>
 
     <section class="howto">
-      <h2>使い方メモ（iPhone）</h2>
+      <h2>iPhoneメモ</h2>
       <ol>
-        <li>動画解析は<strong>無音（muted）＋▶️手動再生</strong>に対応。再生ボタンを押してください。</li>
-        <li>形式は<strong>MP4(H.264)</strong>が最も安定（HEVC/MOVもSafariなら多くは可）。</li>
-        <li>将来の撮影は【設定→カメラ→フォーマット→<strong>互換性優先</strong>】にするとH.264で録れます。</li>
+        <li>動画は無音（muted）＋▶️手動再生が必要なことがあります。</li>
+        <li>画像は <strong>JPEG/PNG</strong> が安定（HEICはブラウザ非対応のことあり）。</li>
+        <li>撮影設定は「設定 → カメラ → フォーマット → <strong>互換性優先</strong>」推奨。</li>
       </ol>
     </section>
   </main>
@@ -68,3 +74,4 @@
   <script type="module" src="script.js"></script>
 </body>
 </html>
+
