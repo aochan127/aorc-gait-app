@@ -1,4 +1,5 @@
-// Camera & Video gait analysis (iPhone-safe)
+// Camera / Video / Image gait analysis (iPhone-safe)
+// MediaPipe Tasks Vision: Pose Landmarker
 import { PoseLandmarker, FilesetResolver, DrawingUtils } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0";
 
 const videoEl = document.getElementById("video");
@@ -13,6 +14,9 @@ const viewSelect = document.getElementById("viewSelect");
 const videoFile = document.getElementById("videoFile");
 const playFileBtn = document.getElementById("playFileBtn");
 
+const imageFile = document.getElementById("imageFile");
+const analyzeImageBtn = document.getElementById("analyzeImageBtn");
+
 const drawSkeleton = document.getElementById("drawSkeleton");
 const showKeypoints = document.getElementById("showKeypoints");
 
@@ -23,7 +27,10 @@ const stepWidth = document.getElementById("stepWidth");
 const tibiaTilt = document.getElementById("tibiaTilt");
 const statusBox = document.getElementById("status");
 
-let poseLandmarker = null;
+let poseLandmarkerVideo = null;   // runningMode: "VIDEO"
+let poseLandmarkerImage = null;   // runningMode: "IMAGE"
+let filesetResolver = null;
+
 let stream = null;
 let videoPlaying = false;
 let lastTs = -1;
@@ -39,26 +46,44 @@ function angleDeg(a,b,c){
   let cos=dot/(m1*m2); cos=Math.max(-1,Math.min(1,cos));
   return Math.acos(cos)*180/Math.PI;
 }
-function tibiaTiltDeg(ankle,knee){ const dx=ankle.x-knee.x, dy=ankle.y-knee.y; return Math.atan2(dx,Math.abs(dy))*180/Math.PI; }
+function tibiaTiltDeg(ankle,knee){ return Math.atan2(ankle.x-knee.x, Math.abs(ankle.y-knee.y))*180/Math.PI; }
 function toPx(l,w,h){ return {x:l.x*w,y:l.y*h,z:l.z}; }
-
-async function loadModel(){
-  setStatus("モデル読込中…");
-  const fr = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm");
-  poseLandmarker = await PoseLandmarker.createFromOptions(fr, {
-    baseOptions:{ modelAssetPath:"https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm/pose_landmarker_full.task", delegate:"GPU" },
-    runningMode:"VIDEO",
-    numPoses:1
-  });
-  setStatus("モデル読込完了");
-}
-document.addEventListener("DOMContentLoaded", () => loadModel().catch(e=>setStatus("モデル読込エラー: "+e.message)));
-
 function setStatus(t){ statusBox.textContent = t; }
 
-// ------- Camera -------
+async function ensureFileset(){
+  if(!filesetResolver){
+    filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm");
+  }
+}
+async function ensureVideoModel(){
+  await ensureFileset();
+  if(!poseLandmarkerVideo){
+    poseLandmarkerVideo = await PoseLandmarker.createFromOptions(filesetResolver, {
+      baseOptions:{ modelAssetPath:"https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm/pose_landmarker_full.task", delegate:"GPU" },
+      runningMode:"VIDEO",
+      numPoses:1
+    });
+  }
+}
+async function ensureImageModel(){
+  await ensureFileset();
+  if(!poseLandmarkerImage){
+    poseLandmarkerImage = await PoseLandmarker.createFromOptions(filesetResolver, {
+      baseOptions:{ modelAssetPath:"https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm/pose_landmarker_full.task", delegate:"GPU" },
+      runningMode:"IMAGE",
+      numPoses:1
+    });
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  // 先に読み込んでおく（失敗しても後で再試行）
+  ensureVideoModel().then(()=>setStatus("モデル読込完了")).catch(e=>setStatus("モデル読込エラー: "+e.message));
+});
+
+// ---------- Camera ----------
 async function startCamera(){
-  if(!poseLandmarker) await loadModel();
+  await ensureVideoModel();
   stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:"environment" }, audio:false });
   videoEl.srcObject = stream;
   videoEl.playsInline = true; videoEl.setAttribute("playsinline","");
@@ -76,22 +101,15 @@ function stopCamera(){
   setStatus("停止");
 }
 
-// ------- Video file (iPhone対策: file選択直後に処理開始) -------
-videoFile?.addEventListener("change", async () => {
-  if(!videoFile.files?.length) return;
-  await playSelectedFile();
-});
-playFileBtn?.addEventListener("click", async () => {
-  if(!videoFile.files?.length){ alert("動画を選択してください"); return; }
-  await playSelectedFile();
-});
+// ---------- Video file ----------
+videoFile?.addEventListener("change", async ()=>{ if(videoFile.files?.length) await playSelectedFile(); });
+playFileBtn?.addEventListener("click", async ()=>{ if(!videoFile.files?.length) alert("動画を選択してください"); else await playSelectedFile(); });
 
 async function playSelectedFile(){
-  if(!poseLandmarker) await loadModel();
+  await ensureVideoModel();
   const file = videoFile.files[0];
   const url = URL.createObjectURL(file);
 
-  // iOS向け属性（HTML側にも付けてるが保険で再設定）
   videoEl.srcObject = null;
   videoEl.muted = true; videoEl.setAttribute("muted","muted");
   videoEl.playsInline = true; videoEl.setAttribute("playsinline",""); videoEl.setAttribute("webkit-playsinline","");
@@ -101,29 +119,76 @@ async function playSelectedFile(){
 
   setStatus("動画読込中…");
 
-  // デバッグ: 再生/エラーイベントをUIに出す
-  const log = (ev)=> setStatus(`動画イベント: ${ev.type}`);
-  ["loadedmetadata","loadeddata","canplay","play","pause","error","stalled","waiting"].forEach(ev=>videoEl.addEventListener(ev,log,{once:false}));
-
   videoEl.onloadedmetadata = async () => {
     resizeCanvas();
     setStatus("動画解析の準備完了（▶️で再生）");
     try {
-      // ファイル選択という“ユーザー操作直後”なので再生できる可能性が高い
       await videoEl.play();
       startVideoLoop();
     } catch(e) {
-      // 自動再生が弾かれたら手動▶️で開始
       setStatus("▶️ を押して再生してください");
       videoEl.addEventListener("play", startVideoLoop, { once:true });
     }
   };
 }
-
 function startVideoLoop(){ videoPlaying = true; setStatus("動画解析中…"); requestAnimationFrame(processFrame); }
 
+// ---------- Image file ----------
+analyzeImageBtn?.addEventListener("click", async ()=>{
+  if(!imageFile.files?.length){ alert("画像を選択してください"); return; }
+  await analyzeSelectedImage();
+});
+imageFile?.addEventListener("change", async ()=>{
+  // 画像選択直後に自動解析したい場合はここで呼ぶ
+  // await analyzeSelectedImage();
+});
+
+async function analyzeSelectedImage(){
+  await ensureImageModel();
+  const file = imageFile.files[0];
+
+  // HEICはブラウザで読めないことがある
+  if(file.type && !/^image\/(jpe?g|png|gif|webp)$/i.test(file.type)){
+    setStatus("この画像形式は非対応の可能性があります（JPEG/PNGを推奨）");
+  }
+
+  const blobUrl = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = async () => {
+    // 表示は動画領域を使わず、canvasに直接描画
+    videoPlaying = false; // ループ停止
+    resizeCanvasTo(img.naturalWidth, img.naturalHeight);
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    try{
+      const res = await poseLandmarkerImage.detect(img);
+      if(res && res.landmarks && res.landmarks.length){
+        const lms = res.landmarks[0];
+        drawResults(lms);
+        // 単一画像のため“平均”は意味が薄いが、UIはそのまま更新
+        computeMetrics(lms, canvas.width, canvas.height);
+        updateMetricsUI();
+        setStatus("画像解析完了");
+      }else{
+        setStatus("人物が検出できませんでした");
+      }
+    }catch(e){
+      setStatus("画像解析エラー: " + e.message);
+    } finally {
+      URL.revokeObjectURL(blobUrl);
+    }
+  };
+  img.onerror = ()=>{ setStatus("画像を読み込めませんでした"); URL.revokeObjectURL(blobUrl); };
+  img.src = blobUrl;
+}
+
+// ---------- Drawing / Metrics ----------
 function resizeCanvas(){
   const w = videoEl.videoWidth || canvas.width, h = videoEl.videoHeight || canvas.height;
+  if(w && h){ canvas.width = w; canvas.height = h; }
+}
+function resizeCanvasTo(w,h){
   if(w && h){ canvas.width = w; canvas.height = h; }
 }
 
@@ -161,6 +226,7 @@ function computeMetrics(lms,w,h){
   for(const k in metricsBuffer){ if(metricsBuffer[k].length>MAX_BUF) metricsBuffer[k].shift(); }
 }
 
+// ---------- Loop ----------
 async function processFrame(ts){
   if(!videoPlaying) return;
   if(lastTs===ts){ requestAnimationFrame(processFrame); return; }
@@ -168,20 +234,24 @@ async function processFrame(ts){
   resizeCanvas();
   ctx.clearRect(0,0,canvas.width,canvas.height);
   try{
-    const res = await poseLandmarker.detectForVideo(videoEl, ts);
-    if(res && res.landmarks && res.landmarks.length){
-      const lms = res.landmarks[0];
-      drawResults(lms);
-      computeMetrics(lms, canvas.width, canvas.height);
-      updateMetricsUI();
+    if(poseLandmarkerVideo){
+      const res = await poseLandmarkerVideo.detectForVideo(videoEl, ts);
+      if(res && res.landmarks && res.landmarks.length){
+        const lms = res.landmarks[0];
+        drawResults(lms);
+        computeMetrics(lms, canvas.width, canvas.height);
+        updateMetricsUI();
+      }
     }
   }catch(e){ setStatus("推論エラー: "+e.message); }
   requestAnimationFrame(processFrame);
 }
 
-// Buttons
-loadModelBtn.addEventListener("click", ()=>loadModel().catch(e=>setStatus("モデル読込エラー: "+e.message)));
+// ---------- Events ----------
+loadModelBtn.addEventListener("click", async ()=>{
+  try{ await Promise.all([ensureVideoModel(), ensureImageModel()]); setStatus("モデル読込完了"); }
+  catch(e){ setStatus("モデル読込エラー: "+e.message); }
+});
 startCamBtn.addEventListener("click", startCamera);
 stopCamBtn.addEventListener("click", stopCamera);
 playFileBtn?.addEventListener("click", async ()=>{ if(!videoFile.files?.length) alert("動画を選択してください"); });
-
