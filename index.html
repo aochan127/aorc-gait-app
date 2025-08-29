@@ -39,7 +39,7 @@
     <section class="stage">
       <div class="video-wrap">
         <!-- iPhoneでのインライン再生対策：playsinline + mutedを許容 -->
-        <video id="video" playsinline></video>
+        <video id="video" playsinline webkit-playsinline muted controls preload="metadata"></video>
         <canvas id="overlay"></canvas>
       </div>
       <aside class="metrics">
