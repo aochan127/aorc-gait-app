@@ -9,8 +9,8 @@
 <body>
   <header>
     <h1>歩行フォーム簡易評価（シンスプリント予防指標）</h1>
-    <p>スマホ/PCのカメラを解析し、膝内反・骨盤ドロップ・ステップ幅・脛骨傾きを表示します。</p>
-    <div class="notice">本ツールは教育・セルフチェック用のプロトタイプです。</div>
+    <p>カメラ or 動画ファイルで解析（膝内反・骨盤ドロップ・ステップ幅・脛骨傾き）。</p>
+    <div class="notice">教育・セルフチェック用のプロトタイプ。臨床判断と併用してください。</div>
   </header>
 
   <main>
@@ -25,6 +25,11 @@
         <button id="startCamBtn">カメラ開始</button>
         <button id="stopCamBtn" disabled>停止</button>
       </div>
+      <div class="row">
+        <!-- iPhone動画も選べる -->
+        <input type="file" id="videoFile" accept="video/*" />
+        <button id="playFileBtn">動画解析</button>
+      </div>
       <div class="row small">
         <label><input type="checkbox" id="drawSkeleton" checked> 骨格を描画</label>
         <label><input type="checkbox" id="showKeypoints" checked> キーポイント表示</label>
@@ -33,6 +38,7 @@
 
     <section class="stage">
       <div class="video-wrap">
+        <!-- iPhoneでのインライン再生対策：playsinline + mutedを許容 -->
         <video id="video" playsinline></video>
         <canvas id="overlay"></canvas>
       </div>
@@ -49,11 +55,11 @@
     </section>
 
     <section class="howto">
-      <h2>撮影ガイド</h2>
+      <h2>使い方メモ（iPhone）</h2>
       <ol>
-        <li>カメラを腰〜胸の高さに固定、全身が入る距離（3–5m）。</li>
-        <li>正面/側方からやや速歩きで5–10秒。</li>
-        <li>iPhoneはHTTPSでOK（GitHub PagesはHTTPS）。</li>
+        <li>動画解析は<strong>無音（muted）＋▶️手動再生</strong>に対応。再生ボタンを押してください。</li>
+        <li>形式は<strong>MP4(H.264)</strong>が最も安定（HEVC/MOVもSafariなら多くは可）。</li>
+        <li>将来の撮影は【設定→カメラ→フォーマット→<strong>互換性優先</strong>】にするとH.264で録れます。</li>
       </ol>
     </section>
   </main>
