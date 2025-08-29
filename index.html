@@ -3,14 +3,22 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>歩行フォーム簡易評価（AORC）</title>
+  <title>歩行フォーム簡易評価（Safe Mode）</title>
   <link rel="stylesheet" href="style.css" />
+  <!-- モジュールの事前読み込み（失敗時は後述の動的importで拾う） -->
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0" />
+  <style>
+    /* でかいステータス画面 */
+    #bigStatus{position:fixed;left:0;right:0;bottom:0;background:#111;color:#0f0;font:14px/1.4 monospace;padding:10px;height:24vh;overflow:auto;z-index:9999;border-top:2px solid #0f0}
+    #bigStatus b{color:#fff}
+    .ok{color:#0f0}.warn{color:#ff0}.err{color:#f66}
+  </style>
 </head>
 <body>
   <header>
-    <h1>歩行フォーム簡易評価（シンスプリント予防指標）</h1>
-    <p>カメラ / 動画ファイル / 画像（写真）で解析できます。</p>
-    <div class="notice">教育・セルフチェック用プロトタイプ。臨床判断と併用してください。</div>
+    <h1>歩行フォーム簡易評価（セーフモード）</h1>
+    <p>カメラ / 動画 / 画像 に対応。iPhone Safariの制約も回避します。</p>
+    <div class="notice">うまく行かない場合でも、下部の黒いログ欄に原因が出ます。</div>
   </header>
 
   <main>
@@ -32,7 +40,6 @@
       </div>
 
       <div class="row">
-        <!-- 追加：画像アップロード -->
         <input type="file" id="imageFile" accept="image/*" />
         <button id="analyzeImageBtn">画像解析</button>
       </div>
@@ -45,6 +52,7 @@
 
     <section class="stage">
       <div class="video-wrap">
+        <!-- iPhone向け属性をフル指定 -->
         <video id="video" playsinline webkit-playsinline muted controls preload="metadata"></video>
         <canvas id="overlay"></canvas>
       </div>
@@ -56,22 +64,15 @@
           <li><strong>ステップ幅</strong>：<span id="stepWidth">-</span></li>
           <li class="side-only"><strong>脛骨傾き（側方）</strong>：<span id="tibiaTilt">-</span>°</li>
         </ul>
-        <div class="status" id="status">モデル未読込</div>
+        <div class="status" id="status">起動中…</div>
       </aside>
     </section>
-
-    <section class="howto">
-      <h2>iPhoneメモ</h2>
-      <ol>
-        <li>動画は無音（muted）＋▶️手動再生が必要なことがあります。</li>
-        <li>画像は <strong>JPEG/PNG</strong> が安定（HEICはブラウザ非対応のことあり）。</li>
-        <li>撮影設定は「設定 → カメラ → フォーマット → <strong>互換性優先</strong>」推奨。</li>
-      </ol>
-    </section>
   </main>
+
+  <!-- 下部に“でかいログ” -->
+  <div id="bigStatus"><b>LOG</b><br/></div>
 
   <footer><p>© A.O.R.C.</p></footer>
   <script type="module" src="script.js"></script>
 </body>
 </html>
-
