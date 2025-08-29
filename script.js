@@ -1,4 +1,4 @@
-// Gait analysis using MediaPipe Tasks Vision (Pose Landmarker)
+// Camera & Video file gait analysis (MediaPipe Pose Landmarker)
 import { PoseLandmarker, FilesetResolver, DrawingUtils } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0";
 
 const videoEl = document.getElementById("video");
@@ -9,6 +9,7 @@ const loadModelBtn = document.getElementById("loadModelBtn");
 const startCamBtn = document.getElementById("startCamBtn");
 const stopCamBtn = document.getElementById("stopCamBtn");
 const viewSelect = document.getElementById("viewSelect");
+
 const videoFile = document.getElementById("videoFile");
 const playFileBtn = document.getElementById("playFileBtn");
 
@@ -31,7 +32,6 @@ const metricsBuffer = { valgusL: [], valgusR: [], pelvicDrop: [], stepWidth: [],
 const MAX_BUF = 300;
 
 function avg(a){ return a.length ? a.reduce((x,y)=>x+y,0)/a.length : NaN; }
-
 function angleDeg(a,b,c){
   const v1={x:a.x-b.x,y:a.y-b.y}, v2={x:c.x-b.x,y:c.y-b.y};
   const dot=v1.x*v2.x+v1.y*v2.y, m1=Math.hypot(v1.x,v1.y), m2=Math.hypot(v2.x,v2.y);
@@ -46,39 +46,31 @@ function tibiaTiltDeg(ankle,knee){
 }
 function toPx(l,w,h){ return {x:l.x*w,y:l.y*h,z:l.z}; }
 
-// ---------- Model ----------
+// ---- Model ----
 async function loadModel(){
   statusBox.textContent="モデル読込中...";
   const fr = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm");
   poseLandmarker = await PoseLandmarker.createFromOptions(fr, {
-    baseOptions:{
-      modelAssetPath:"https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm/pose_landmarker_full.task",
-      delegate:"GPU"
-    },
+    baseOptions:{ modelAssetPath:"https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm/pose_landmarker_full.task", delegate:"GPU" },
     runningMode:"VIDEO",
     numPoses:1
   });
   statusBox.textContent="モデル読込完了";
 }
+document.addEventListener("DOMContentLoaded", () => { loadModel().catch(e=>statusBox.textContent="モデル読込エラー: "+e.message); });
 
-// Safariで自動読込（ボタン押し忘れ対策）
-document.addEventListener("DOMContentLoaded", () => {
-  loadModel().catch(e => { statusBox.textContent = "モデル読込エラー: " + e.message; });
-});
-
-// ---------- Camera ----------
+// ---- Camera ----
 async function startCamera(){
   if(!poseLandmarker) await loadModel();
-  stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}, audio:false});
+  stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:"environment" }, audio:false });
   videoEl.srcObject = stream;
-  videoEl.playsInline = true; // iOS必須
+  videoEl.playsInline = true; // iOS
   await videoEl.play();
   videoPlaying = true;
-  canvas.width = videoEl.videoWidth;
-  canvas.height = videoEl.videoHeight;
+  canvas.width = videoEl.videoWidth; canvas.height = videoEl.videoHeight;
   statusBox.textContent="カメラ動作中";
+  startCamBtn.disabled = true; stopCamBtn.disabled = false;
   requestAnimationFrame(processFrame);
-  startCamBtn.disabled=true; stopCamBtn.disabled=false;
 }
 function stopCamera(){
   if(stream){ for(const t of stream.getTracks()) t.stop(); }
@@ -87,7 +79,7 @@ function stopCamera(){
   statusBox.textContent="停止";
 }
 
-// ---------- Video file (iPhone対応強化) ----------
+// ---- Video file (iPhone対応) ----
 async function playVideoFile(){
   if(!poseLandmarker) await loadModel();
   const file = videoFile.files?.[0];
@@ -96,43 +88,31 @@ async function playVideoFile(){
   videoEl.srcObject = null;
   videoEl.src = url;
 
-  // iOSの自動再生制限回避：無音＆インライン再生を指定
-  videoEl.muted = true;
-  videoEl.setAttribute("muted","muted");
+  // iOSの制約対策：無音＆インライン＆コントロール表示
+  videoEl.muted = true; videoEl.setAttribute("muted","muted");
   videoEl.playsInline = true;
-  videoEl.controls = true; // 再生ボタンを出す（ユーザー操作のトリガー）
+  videoEl.controls = true;
 
   videoEl.onloadedmetadata = async () => {
     canvas.width = videoEl.videoWidth || canvas.width;
     canvas.height = videoEl.videoHeight || canvas.height;
-    statusBox.textContent="動画解析の準備完了（▶️を押して再生）";
-    // 自動再生を試み、失敗したら手動再生を促す
+    statusBox.textContent="動画解析の準備完了（▶️で再生）";
     try {
-      await videoEl.play();
+      await videoEl.play();          // 自動再生トライ
       startVideoLoop();
     } catch(e) {
-      // 手動再生イベントで解析を開始
-      videoEl.addEventListener("play", startVideoLoop, { once:true });
+      videoEl.addEventListener("play", startVideoLoop, { once:true }); // 手動再生で開始
     }
   };
 }
+function startVideoLoop(){ videoPlaying = true; statusBox.textContent="動画解析中..."; requestAnimationFrame(processFrame); }
 
-function startVideoLoop(){
-  videoPlaying = true;
-  statusBox.textContent="動画解析中...";
-  requestAnimationFrame(processFrame);
-}
-
+// ---- Draw / Metrics ----
 function drawResults(lms){
   const du = new DrawingUtils(ctx);
-  if(drawSkeleton.checked){
-    du.drawLandmarks(lms,{radius:3});
-    du.drawConnectors(lms, PoseLandmarker.POSE_CONNECTIONS);
-  }else if(showKeypoints.checked){
-    du.drawLandmarks(lms,{radius:2});
-  }
+  if(drawSkeleton.checked){ du.drawLandmarks(lms,{radius:3}); du.drawConnectors(lms, PoseLandmarker.POSE_CONNECTIONS); }
+  else if(showKeypoints.checked){ du.drawLandmarks(lms,{radius:2}); }
 }
-
 function updateMetricsUI(){
   const vL=avg(metricsBuffer.valgusL), vR=avg(metricsBuffer.valgusR), pD=avg(metricsBuffer.pelvicDrop),
         sW=avg(metricsBuffer.stepWidth), tT=avg(metricsBuffer.tibiaTilt);
@@ -141,11 +121,8 @@ function updateMetricsUI(){
   pelvicDrop.textContent=isNaN(pD)?"-":pD.toFixed(1);
   stepWidth.textContent=isNaN(sW)?"-":sW.toFixed(2);
   tibiaTilt.textContent=isNaN(tT)?"-":tT.toFixed(1);
-  document.querySelectorAll(".side-only").forEach(el=>{
-    el.style.display = (viewSelect.value==="side") ? "list-item":"none";
-  });
+  document.querySelectorAll(".side-only").forEach(el=>{ el.style.display = (viewSelect.value==="side") ? "list-item":"none"; });
 }
-
 function computeMetrics(lms,w,h){
   const IDX={l_hip:23,r_hip:24,l_knee:25,r_knee:26,l_ankle:27,r_ankle:28};
   const L=(i)=>toPx(lms[i],w,h);
@@ -155,14 +132,13 @@ function computeMetrics(lms,w,h){
   if(!isNaN(vr)) metricsBuffer.valgusR.push(vr);
   const hipW=Math.max(1,Math.hypot(lh.x-rh.x,lh.y-rh.y));
   const dy=(lh.y-rh.y);
-  const angle=Math.atan2(Math.abs(dy), hipW)*180/Math.PI;
+  const angle=Math.atan2(Math.abs(dy),hipW)*180/Math.PI;
   metricsBuffer.pelvicDrop.push(angle);
   metricsBuffer.stepWidth.push(Math.abs(la.x-ra.x)/hipW);
   const tib=Math.abs((la.y>ra.y)?tibiaTiltDeg(la,lk):tibiaTiltDeg(ra,rk));
   if(!isNaN(tib)) metricsBuffer.tibiaTilt.push(tib);
   for(const k in metricsBuffer){ if(metricsBuffer[k].length>MAX_BUF) metricsBuffer[k].shift(); }
 }
-
 async function processFrame(ts){
   if(!videoPlaying) return;
   if(lastTs===ts){ requestAnimationFrame(processFrame); return; }
@@ -171,18 +147,19 @@ async function processFrame(ts){
   if(w && h){ canvas.width=w; canvas.height=h; }
   ctx.clearRect(0,0,canvas.width,canvas.height);
   try{
-    const res=await poseLandmarker.detectForVideo(videoEl,ts);
+    const res = await poseLandmarker.detectForVideo(videoEl, ts);
     if(res && res.landmarks && res.landmarks.length){
-      const lms=res.landmarks[0];
+      const lms = res.landmarks[0];
       drawResults(lms);
-      computeMetrics(lms,canvas.width,canvas.height);
+      computeMetrics(lms, canvas.width, canvas.height);
       updateMetricsUI();
     }
   }catch(e){ statusBox.textContent="推論エラー: "+e.message; }
   requestAnimationFrame(processFrame);
 }
 
-loadModelBtn.addEventListener("click", () => loadModel().catch(e=>statusBox.textContent="モデル読込エラー: "+e.message));
+// ---- Events ----
+loadModelBtn.addEventListener("click", ()=>loadModel().catch(e=>statusBox.textContent="モデル読込エラー: "+e.message));
 startCamBtn.addEventListener("click", startCamera);
 stopCamBtn.addEventListener("click", stopCamera);
 playFileBtn.addEventListener("click", playVideoFile);
